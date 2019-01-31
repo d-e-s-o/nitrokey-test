@@ -297,9 +297,9 @@ fn expand_connect(group: DeviceGroup, ret_type: &syn::ReturnType) -> Tokens {
   };
 
   let connect = match group {
-    DeviceGroup::No => quote! { ::nitrokey::connect() },
-    DeviceGroup::Pro => quote! { ::nitrokey::Pro::connect() },
-    DeviceGroup::Storage => quote! { ::nitrokey::Storage::connect() },
+    DeviceGroup::No => quote! { manager.connect() },
+    DeviceGroup::Pro => quote! { manager.connect_pro() },
+    DeviceGroup::Storage => quote! { manager.connect_storage() },
   };
 
   let connect_cond = if let DeviceGroup::No = group {
@@ -432,9 +432,24 @@ fn expand_call(device: EmittedDevice, wrappee: &syn::ItemFn) -> Tokens {
     },
   };
 
-  quote! {
-    let device = #connect;
-    #call
+  if let EmittedDevice::None = device {
+    // Make sure that if no device is passed in the user is still
+    // allowed to use nitrokey::take successfully by not keeping a
+    // Manager object lying around. We just need it to check whether or
+    // not to skip the test.
+    quote! {
+      {
+        let mut manager = ::nitrokey::force_take().unwrap();
+        let _ = #connect;
+      }
+      #call
+    }
+  } else {
+    quote! {
+      let mut manager = ::nitrokey::force_take().unwrap();
+      let device = #connect;
+      #call
+    }
   }
 }
 

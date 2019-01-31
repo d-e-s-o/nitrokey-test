@@ -1,5 +1,6 @@
 Unreleased
 ----------
+- Updated code to be compatible with `nitrokey` version `0.4`
 - Added badge showing the license to `README.md`
 
 

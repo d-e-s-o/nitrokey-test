@@ -25,7 +25,8 @@ use nitrokey::Model;
 
 #[nitrokey_test::test]
 fn no_dev() {
-  let error = nitrokey::connect().unwrap_err();
+  let mut manager = nitrokey::take().unwrap();
+  let error = manager.connect().unwrap_err();
   match error {
     Error::CommunicationError(CommunicationError::NotConnected) => (),
     _ => panic!("received unexpected error: {:?}", error),
@@ -35,25 +36,25 @@ fn no_dev() {
 #[nitrokey_test::test]
 fn pro(device: Pro) {
   assert_eq!(device.get_model(), Model::Pro);
-  drop(device);
 
-  assert!(nitrokey::connect_model(Model::Pro).is_ok())
+  let manager = device.into_manager();
+  assert!(manager.connect_pro().is_ok())
 }
 
 #[nitrokey_test::test]
 fn storage(device: Storage) {
   assert_eq!(device.get_model(), Model::Storage);
-  drop(device);
 
-  assert!(nitrokey::connect_model(Model::Storage).is_ok())
+  let manager = device.into_manager();
+  assert!(manager.connect_storage().is_ok())
 }
 
 #[nitrokey_test::test]
 fn any(device: DeviceWrapper) {
   let model = device.get_model();
-  drop(device);
 
-  assert!(nitrokey::connect_model(model).is_ok())
+  let manager = device.into_manager();
+  assert!(manager.connect_model(model).is_ok())
 }
 
 #[nitrokey_test::test]
@@ -70,13 +71,13 @@ fn ignore_any(_device: nitrokey::DeviceWrapper) {
 
 
 /// A trait providing a method with a &mut self signature.
-trait MutableDevice {
+trait MutableDevice<'mgr> {
   fn test_mut(&mut self) -> bool {
     true
   }
 }
 
-impl MutableDevice for nitrokey::DeviceWrapper {}
+impl<'mgr> MutableDevice<'mgr> for nitrokey::DeviceWrapper<'mgr> {}
 
 #[nitrokey_test::test]
 fn mutable_device(mut device: nitrokey::DeviceWrapper) {
