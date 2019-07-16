@@ -542,7 +542,6 @@ mod tests {
   use super::determine_device;
   use super::SupportedDevice;
 
-  use quote::quote;
   use syn;
 
 
