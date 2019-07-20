@@ -1,3 +1,8 @@
+Unreleased
+----------
+- Downgraded various crate-level lints from `deny` to `warn`
+
+
 0.3.0
 -----
 - Updated code to be compatible with `nitrokey` version `0.4`
