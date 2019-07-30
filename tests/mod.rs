@@ -25,7 +25,7 @@ use nitrokey::Model;
 
 #[nitrokey_test::test]
 fn no_dev() {
-  let mut manager = nitrokey::take().unwrap();
+  let mut manager = nitrokey::force_take().unwrap();
   let error = manager.connect().unwrap_err();
   match error {
     Error::CommunicationError(CommunicationError::NotConnected) => (),
