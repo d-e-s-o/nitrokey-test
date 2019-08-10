@@ -116,6 +116,16 @@ const NITROKEY_GROUP_PRO: &str = "pro";
 const NITROKEY_GROUP_STORAGE: &str = "storage";
 
 
+/// The kind of argument a test function accepts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArgumentType {
+  /// Pass an actual device handle to the test function.
+  Device,
+  /// Pass in a device wrapper to the test function.
+  DeviceWrapper,
+}
+
+
 /// A type used to determine what Nitrokey device to test on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SupportedDevice {
@@ -250,8 +260,12 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
   let input = syn::parse_macro_input!(item as syn::ItemFn);
   let dev_type = determine_device(&input.decl.inputs);
+  let (device, _) = dev_type
+    .map_or((None, None), |(device, argument)| {
+      (Some(device), Some(argument))
+    });
 
-  match dev_type {
+  match device {
     None => {
       let name = format!("{}", &input.ident);
       expand_wrapper(name, EmittedDevice::None, &input)
@@ -493,7 +507,7 @@ where
   }
 }
 
-fn determine_device_for_arg(arg: &syn::FnArg) -> SupportedDevice {
+fn determine_device_for_arg(arg: &syn::FnArg) -> (SupportedDevice, ArgumentType) {
   match arg {
     syn::FnArg::Captured(arg) => {
       let type_ = &arg.ty;
@@ -505,9 +519,9 @@ fn determine_device_for_arg(arg: &syn::FnArg) -> SupportedDevice {
 
           let type_ = format!("{}", path.path.segments.last().unwrap().value().ident);
           match type_.as_ref() {
-            "Storage" => SupportedDevice::Storage,
-            "Pro" => SupportedDevice::Pro,
-            "DeviceWrapper" => SupportedDevice::Any,
+            "Storage" => (SupportedDevice::Storage, ArgumentType::Device),
+            "Pro" => (SupportedDevice::Pro, ArgumentType::Device),
+            "DeviceWrapper" => (SupportedDevice::Any, ArgumentType::DeviceWrapper),
             _ => panic!("unsupported function argument type: {}", type_),
           }
         },
@@ -521,7 +535,9 @@ fn determine_device_for_arg(arg: &syn::FnArg) -> SupportedDevice {
 
 /// Determine the kind of Nitrokey device a test function support, based
 /// on the type of its only parameter.
-fn determine_device<P>(args: &punctuated::Punctuated<syn::FnArg, P>) -> Option<SupportedDevice>
+fn determine_device<P>(
+  args: &punctuated::Punctuated<syn::FnArg, P>,
+) -> Option<(SupportedDevice, ArgumentType)>
 where
   P: quote::ToTokens,
 {
@@ -535,6 +551,7 @@ where
 
 #[cfg(test)]
 mod tests {
+  use super::ArgumentType;
   use super::determine_device;
   use super::SupportedDevice;
 
@@ -547,9 +564,9 @@ mod tests {
       #[nitrokey_test::test]
       fn test_none() {}
     };
-    let device = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.decl.inputs);
 
-    assert_eq!(device, None);
+    assert_eq!(dev_type, None);
   }
 
   #[test]
@@ -558,9 +575,9 @@ mod tests {
       #[nitrokey_test::test]
       fn test_pro(device: nitrokey::Pro) {}
     };
-    let device = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.decl.inputs);
 
-    assert_eq!(device, Some(SupportedDevice::Pro));
+    assert_eq!(dev_type, Some((SupportedDevice::Pro, ArgumentType::Device)));
   }
 
   #[test]
@@ -569,9 +586,9 @@ mod tests {
       #[nitrokey_test::test]
       fn test_storage(device: nitrokey::Storage) {}
     };
-    let device = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.decl.inputs);
 
-    assert_eq!(device, Some(SupportedDevice::Storage));
+    assert_eq!(dev_type, Some((SupportedDevice::Storage, ArgumentType::Device)));
   }
 
   #[test]
@@ -580,9 +597,9 @@ mod tests {
       #[nitrokey_test::test]
       fn test_any(device: nitrokey::DeviceWrapper) {}
     };
-    let device = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.decl.inputs);
 
-    assert_eq!(device, Some(SupportedDevice::Any));
+    assert_eq!(dev_type, Some((SupportedDevice::Any, ArgumentType::DeviceWrapper)));
   }
 
   #[test]
