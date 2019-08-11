@@ -138,37 +138,6 @@ enum SupportedDevice {
 }
 
 
-/// A type defining what kind of Nitrokey device to connect to and
-/// whether to wrap it.
-#[derive(Clone, Copy, Debug)]
-enum EmittedDevice {
-  /// Bail out if the connection succeeds, i.e., only run when no device
-  /// is present.
-  None,
-  /// Connect to and pass in a `nitrokey::Pro`.
-  Pro,
-  /// Connect to and pass in a `nitrokey::Storage`.
-  Storage,
-  /// Connect to a `nitrokey::Pro` but pass it in as a `nitrokey::DeviceWrapper`.
-  WrappedPro,
-  /// Connect to a `nitrokey::Storage` but pass it in as a `nitrokey::DeviceWrapper`.
-  WrappedStorage,
-}
-
-impl EmittedDevice {
-  /// Retrieve the group a device belongs to.
-  fn as_group(self) -> DeviceGroup {
-    match self {
-      EmittedDevice::None => DeviceGroup::No,
-      EmittedDevice::Pro |
-      EmittedDevice::WrappedPro => DeviceGroup::Pro,
-      EmittedDevice::Storage |
-      EmittedDevice::WrappedStorage => DeviceGroup::Storage,
-    }
-  }
-}
-
-
 /// The group a particular device belongs to.
 #[derive(Clone, Copy, Debug)]
 enum DeviceGroup {
@@ -187,6 +156,19 @@ impl AsRef<str> for DeviceGroup {
       DeviceGroup::No => NITROKEY_GROUP_NODEV,
       DeviceGroup::Pro => NITROKEY_GROUP_PRO,
       DeviceGroup::Storage => NITROKEY_GROUP_STORAGE,
+    }
+  }
+}
+
+impl From<Option<SupportedDevice>> for DeviceGroup {
+  fn from(device: Option<SupportedDevice>) -> Self {
+    match device {
+      None => DeviceGroup::No,
+      Some(device) => match device {
+        SupportedDevice::Pro => DeviceGroup::Pro,
+        SupportedDevice::Storage => DeviceGroup::Storage,
+        SupportedDevice::Any => panic!("an Any device cannot belong to a group"),
+      }
     }
   }
 }
@@ -260,7 +242,7 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
   let input = syn::parse_macro_input!(item as syn::ItemFn);
   let dev_type = determine_device(&input.decl.inputs);
-  let (device, _) = dev_type
+  let (device, argument) = dev_type
     .map_or((None, None), |(device, argument)| {
       (Some(device), Some(argument))
     });
@@ -268,22 +250,24 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
   match device {
     None => {
       let name = format!("{}", &input.ident);
-      expand_wrapper(name, EmittedDevice::None, &input)
+      expand_wrapper(name, None, argument, &input)
     },
     Some(SupportedDevice::Pro) => {
       let name = format!("{}", &input.ident);
-      expand_wrapper(name, EmittedDevice::Pro, &input)
+      expand_wrapper(name, device, argument, &input)
     },
     Some(SupportedDevice::Storage) => {
       let name = format!("{}", &input.ident);
-      expand_wrapper(name, EmittedDevice::Storage, &input)
+      expand_wrapper(name, device, argument, &input)
     },
     Some(SupportedDevice::Any) => {
       let name = format!("{}_pro", &input.ident);
-      let pro = expand_wrapper(name, EmittedDevice::WrappedPro, &input);
+      let dev = Some(SupportedDevice::Pro);
+      let pro = expand_wrapper(name, dev, argument, &input);
 
       let name = format!("{}_storage", &input.ident);
-      let storage = expand_wrapper(name, EmittedDevice::WrappedStorage, &input);
+      let dev = Some(SupportedDevice::Storage);
+      let storage = expand_wrapper(name, dev, argument, &input);
 
       // Emit a test for both the Pro and the Storage device.
       quote! {
@@ -389,7 +373,11 @@ fn expand_connect(group: DeviceGroup, ret_type: &syn::ReturnType) -> Tokens {
   }
 }
 
-fn expand_arg<P>(device: EmittedDevice, args: &punctuated::Punctuated<syn::FnArg, P>) -> Tokens
+fn expand_arg<P>(
+  device: Option<SupportedDevice>,
+  argument: Option<ArgumentType>,
+  args: &punctuated::Punctuated<syn::FnArg, P>,
+) -> Tokens
 where
   P: quote::ToTokens,
 {
@@ -398,11 +386,16 @@ where
   // client code may have a "use" and may just contain a `Pro`, for
   // example, while we really need to work with the absolute path.
   let arg_type = match device {
-    EmittedDevice::None => quote! {},
-    EmittedDevice::Pro => quote! { ::nitrokey::Pro },
-    EmittedDevice::Storage => quote! { ::nitrokey::Storage },
-    EmittedDevice::WrappedPro |
-    EmittedDevice::WrappedStorage => quote! { ::nitrokey::DeviceWrapper },
+    None => quote! {},
+    Some(device) => match argument {
+      None => quote! {},
+      Some(ArgumentType::Device) => match device {
+        SupportedDevice::Pro => quote! { ::nitrokey::Pro },
+        SupportedDevice::Storage => quote! { ::nitrokey::Storage },
+        SupportedDevice::Any => unreachable!(),
+      },
+      Some(ArgumentType::DeviceWrapper) => quote! { ::nitrokey::DeviceWrapper },
+    },
   };
 
   match args.first() {
@@ -421,28 +414,39 @@ where
   }
 }
 
-fn expand_call(device: EmittedDevice, wrappee: &syn::ItemFn) -> Tokens {
+fn expand_call(
+  device: Option<SupportedDevice>,
+  argument: Option<ArgumentType>,
+  wrappee: &syn::ItemFn,
+) -> Tokens
+{
   let test_name = &wrappee.ident;
   let decl = &wrappee.decl;
-  let connect = expand_connect(device.as_group(), &decl.output);
+  let group = DeviceGroup::from(device);
+  let connect = expand_connect(group, &decl.output);
 
   let call = match device {
-    EmittedDevice::None => quote! { #test_name() },
-    EmittedDevice::Pro |
-    EmittedDevice::Storage => quote! { #test_name(device) },
-    EmittedDevice::WrappedPro => {
-      quote! {
-        #test_name(::nitrokey::DeviceWrapper::Pro(device))
-      }
-    },
-    EmittedDevice::WrappedStorage => {
-      quote! {
-        #test_name(::nitrokey::DeviceWrapper::Storage(device))
+    None => quote! { #test_name() },
+    Some(device) => match argument {
+      None => quote! { #test_name() },
+      Some(ArgumentType::Device) => quote! { #test_name(device) },
+      Some(ArgumentType::DeviceWrapper) => match device {
+        SupportedDevice::Pro => {
+          quote! {
+            #test_name(::nitrokey::DeviceWrapper::Pro(device))
+          }
+        },
+        SupportedDevice::Storage => {
+          quote! {
+            #test_name(::nitrokey::DeviceWrapper::Storage(device))
+          }
+        },
+        SupportedDevice::Any => unreachable!(),
       }
     },
   };
 
-  if let EmittedDevice::None = device {
+  if argument.is_none() {
     // Make sure that if no device is passed in the user is still
     // allowed to use nitrokey::take successfully by not keeping a
     // Manager object lying around. We just need it to check whether or
@@ -464,7 +468,12 @@ fn expand_call(device: EmittedDevice, wrappee: &syn::ItemFn) -> Tokens {
 }
 
 /// Emit code for a wrapper function around a Nitrokey test function.
-fn expand_wrapper<S>(fn_name: S, device: EmittedDevice, wrappee: &syn::ItemFn) -> Tokens
+fn expand_wrapper<S>(
+  fn_name: S,
+  device: Option<SupportedDevice>,
+  argument: Option<ArgumentType>,
+  wrappee: &syn::ItemFn,
+) -> Tokens
 where
   S: AsRef<str>,
 {
@@ -477,8 +486,8 @@ where
   let decl = &wrappee.decl;
   let body = &wrappee.block;
   let test_name = &wrappee.ident;
-  let test_arg = expand_arg(device, &decl.inputs);
-  let test_call = expand_call(device, wrappee);
+  let test_arg = expand_arg(device, argument, &decl.inputs);
+  let test_call = expand_call(device, argument, wrappee);
 
   let ret_type = match &decl.output {
     syn::ReturnType::Default => quote! {()},
