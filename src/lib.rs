@@ -137,6 +137,75 @@ enum SupportedDevice {
   Any,
 }
 
+/// A type used for "filtering" what device types to emit test code for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Filter {
+  /// Only emit tests for a Nitrokey Pro.
+  Pro,
+  /// Only emit tests for a Nitrokey Storage.
+  Storage,
+}
+
+impl Filter {
+  pub fn from_attribute(attr: &TokenStream) -> Option<Self> {
+    match attr.to_string().as_ref() {
+      "pro" => Some(Filter::Pro),
+      "storage" => Some(Filter::Storage),
+      "" => None,
+      _ => panic!("unexpected filter argument: {}", attr),
+    }
+  }
+}
+
+
+/// Apply a filter to a `SupportedDevice`.
+///
+/// Filtering basically produces the following outcomes:
+/// #[test]          fn foo();                      -> no device
+/// #[test(pro)]     fn foo();                      -> pro
+/// #[test(storage)] fn foo();                      -> storage
+/// #[test]          fn foo(device: Pro);           -> pro
+/// #[test(pro)]     fn foo(device: Pro);           -> pro
+/// #[test(storage)] fn foo(device: Pro);           -> error
+/// #[test]          fn foo(device: Storage);       -> storage
+/// #[test(pro)]     fn foo(device: Storage);       -> error
+/// #[test(storage)] fn foo(device: Storage);       -> storage
+/// #[test]          fn foo(device: DeviceWrapper); -> any
+/// #[test(pro)]     fn foo(device: DeviceWrapper); -> pro
+/// #[test(storage)] fn foo(device: DeviceWrapper); -> storage
+fn filter_device(
+  device: Option<SupportedDevice>,
+  filter: Option<Filter>,
+) -> Option<SupportedDevice>
+{
+  match device {
+    None => match filter {
+      None => None,
+      // As can be seen from the table above, we have some logic in here
+      // (for the user's convenience) that is no longer strictly a
+      // filter, but rather an addition. That is done mostly for the
+      // user's convenience.
+      Some(Filter::Pro) => Some(SupportedDevice::Pro),
+      Some(Filter::Storage) => Some(SupportedDevice::Storage),
+    },
+    Some(SupportedDevice::Pro) => match filter {
+      None |
+      Some(Filter::Pro) => Some(SupportedDevice::Pro),
+      Some(Filter::Storage) => panic!("unable to combine 'storage' filter with Pro device"),
+    },
+    Some(SupportedDevice::Storage) => match filter {
+      None |
+      Some(Filter::Storage) => Some(SupportedDevice::Storage),
+      Some(Filter::Pro) => panic!("unable to combine 'pro' filter with Storage device"),
+    },
+    Some(SupportedDevice::Any) => match filter {
+      None => Some(SupportedDevice::Any),
+      Some(Filter::Pro) => Some(SupportedDevice::Pro),
+      Some(Filter::Storage) => Some(SupportedDevice::Storage),
+    },
+  }
+}
+
 
 /// The group a particular device belongs to.
 #[derive(Clone, Copy, Debug)]
@@ -232,20 +301,17 @@ impl quote::ToTokens for DeviceGroup {
 /// ```
 #[proc_macro_attribute]
 pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
-  // Bail out if user tried to pass additional arguments. E.g.,
-  // #[nitrokey_test::test(foo = "bar")
-  if !attr.is_empty() {
-    panic!("unsupported attributes supplied: {}", attr);
-  }
-  // Make clippy happy.
-  drop(attr);
-
   let input = syn::parse_macro_input!(item as syn::ItemFn);
+  let filter = Filter::from_attribute(&attr);
   let dev_type = determine_device(&input.decl.inputs);
   let (device, argument) = dev_type
     .map_or((None, None), |(device, argument)| {
       (Some(device), Some(argument))
     });
+  let device = filter_device(device, filter);
+
+  // Make clippy happy.
+  drop(attr);
 
   match device {
     None => {

@@ -1,5 +1,7 @@
 Unreleased
 ----------
+- Added support for device filters to test functions, e.g.,
+  `#[nitrokey_test::test(pro)]`
 - Downgraded various crate-level lints from `deny` to `warn`
 
 
