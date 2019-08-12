@@ -47,6 +47,14 @@ fn pro_filter() {
   assert!(manager.connect_pro().is_ok());
 }
 
+#[nitrokey_test::test(pro)]
+fn pro_model(model: Model) {
+  assert_eq!(model, Model::Pro);
+
+  let mut manager = nitrokey::force_take().unwrap();
+  assert!(manager.connect_pro().is_ok());
+}
+
 #[nitrokey_test::test]
 fn storage(device: Storage) {
   assert_eq!(device.get_model(), Model::Storage);
@@ -57,6 +65,14 @@ fn storage(device: Storage) {
 
 #[nitrokey_test::test(storage)]
 fn storage_filter() {
+  let mut manager = nitrokey::force_take().unwrap();
+  assert!(manager.connect_storage().is_ok());
+}
+
+#[nitrokey_test::test(storage)]
+fn storage_model(model: Model) {
+  assert_eq!(model, Model::Storage);
+
   let mut manager = nitrokey::force_take().unwrap();
   assert!(manager.connect_storage().is_ok());
 }
@@ -83,6 +99,12 @@ fn any_pro_filter(device: DeviceWrapper) {
     nitrokey::DeviceWrapper::Pro(_) => (),
     _ => panic!("received invalid model: {:?}", device),
   }
+}
+
+#[nitrokey_test::test]
+fn any_model(model: Model) {
+  let mut manager = nitrokey::force_take().unwrap();
+  assert!(manager.connect_model(model).is_ok());
 }
 
 #[nitrokey_test::test]

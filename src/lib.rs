@@ -123,8 +123,9 @@ enum ArgumentType {
   Device,
   /// Pass in a device wrapper to the test function.
   DeviceWrapper,
+  /// Pass a `Model` object to the test function.
+  Model,
 }
-
 
 /// A type used to determine what Nitrokey device to test on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -173,6 +174,9 @@ impl Filter {
 /// #[test]          fn foo(device: DeviceWrapper); -> any
 /// #[test(pro)]     fn foo(device: DeviceWrapper); -> pro
 /// #[test(storage)] fn foo(device: DeviceWrapper); -> storage
+/// #[test]          fn foo(model: Model);          -> any
+/// #[test(pro)]     fn foo(model: Model);          -> pro
+/// #[test(storage)] fn foo(model: Model);          -> storage
 fn filter_device(
   device: Option<SupportedDevice>,
   filter: Option<Filter>,
@@ -276,11 +280,37 @@ impl quote::ToTokens for DeviceGroup {
 /// }
 /// ```
 ///
+/// Test functionality on any Nitrokey device, but leave the device
+/// connection to the user and just provide the model:
+/// ```rust,no_run
+/// #[nitrokey_test::test]
+/// fn some_other_nitrokey_test(model: nitrokey::Model) {
+///   // Connect to a device of the provided model.
+/// }
+/// ```
+///
 /// Test functionality on a Nitrokey Pro device:
 /// ```rust,no_run
 /// #[nitrokey_test::test]
 /// fn some_pro_test(device: nitrokey::Pro) {
 ///   assert_eq!(device.get_model(), nitrokey::Model::Pro);
+/// }
+/// ```
+///
+/// Test functionality on a Nitrokey Pro device, but leave the device
+/// connection to the user:
+/// ```rust,no_run
+/// #[nitrokey_test::test(pro)]
+/// fn some_other_pro_test() {
+///   // Do something on a Pro device.
+/// }
+/// ```
+///
+/// A model can be provided optionally, like so:
+/// ```rust,no_run
+/// #[nitrokey_test::test(pro)]
+/// fn some_other_pro_test(model: nitrokey::Model) {
+///   assert_eq!(model, nitrokey::Model::Pro);
 /// }
 /// ```
 ///
@@ -461,6 +491,7 @@ where
         SupportedDevice::Any => unreachable!(),
       },
       Some(ArgumentType::DeviceWrapper) => quote! { ::nitrokey::DeviceWrapper },
+      Some(ArgumentType::Model) => quote! { ::nitrokey::Model },
     },
   };
 
@@ -508,27 +539,40 @@ fn expand_call(
           }
         },
         SupportedDevice::Any => unreachable!(),
+      },
+      Some(ArgumentType::Model) => {
+        let model = match device {
+          SupportedDevice::Pro => quote! { ::nitrokey::Model::Pro },
+          SupportedDevice::Storage => quote! { ::nitrokey::Model::Storage },
+          SupportedDevice::Any => unreachable!(),
+        };
+        quote! { #test_name(#model) }
       }
     },
   };
 
-  if argument.is_none() {
-    // Make sure that if no device is passed in the user is still
-    // allowed to use nitrokey::take successfully by not keeping a
-    // Manager object lying around. We just need it to check whether or
-    // not to skip the test.
-    quote! {
-      {
-        let mut manager = ::nitrokey::force_take().unwrap();
-        let _ = #connect;
+  match argument {
+    None |
+    Some(ArgumentType::Model) => {
+      // Make sure that if no device is passed in the user is still
+      // allowed to use nitrokey::take successfully by not keeping a
+      // Manager object lying around. We just need it to check whether or
+      // not to skip the test.
+      quote! {
+        {
+          let mut manager = ::nitrokey::force_take().unwrap();
+          let _ = #connect;
+        }
+        #call
       }
-      #call
-    }
-  } else {
-    quote! {
-      let mut manager = ::nitrokey::force_take().unwrap();
-      let device = #connect;
-      #call
+    },
+    Some(ArgumentType::Device) |
+    Some(ArgumentType::DeviceWrapper) => {
+      quote! {
+        let mut manager = ::nitrokey::force_take().unwrap();
+        let device = #connect;
+        #call
+      }
     }
   }
 }
@@ -594,6 +638,7 @@ fn determine_device_for_arg(arg: &syn::FnArg) -> (SupportedDevice, ArgumentType)
 
           let type_ = format!("{}", path.path.segments.last().unwrap().value().ident);
           match type_.as_ref() {
+            "Model" => (SupportedDevice::Any, ArgumentType::Model),
             "Storage" => (SupportedDevice::Storage, ArgumentType::Device),
             "Pro" => (SupportedDevice::Pro, ArgumentType::Device),
             "DeviceWrapper" => (SupportedDevice::Any, ArgumentType::DeviceWrapper),
