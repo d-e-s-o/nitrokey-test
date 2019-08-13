@@ -1,5 +1,5 @@
-Unreleased
-----------
+0.3.1
+-----
 - Added support for device filters to test functions, e.g.,
   `#[nitrokey_test::test(pro)]`
 - Added support for `model` arguments to test functions
