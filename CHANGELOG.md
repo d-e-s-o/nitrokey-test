@@ -1,3 +1,10 @@
+Unreleased
+----------
+- Bumped `syn` dependency to `1.0`
+- Bumped `quote` dependency to `1.0`
+- Bumped `proc-macro` dependency to `1.0`
+
+
 0.3.1
 -----
 - Added support for device filters to test functions, e.g.,

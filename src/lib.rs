@@ -333,7 +333,7 @@ impl quote::ToTokens for DeviceGroup {
 pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
   let input = syn::parse_macro_input!(item as syn::ItemFn);
   let filter = Filter::from_attribute(&attr);
-  let dev_type = determine_device(&input.decl.inputs);
+  let dev_type = determine_device(&input.sig.inputs);
   let (device, argument) = dev_type
     .map_or((None, None), |(device, argument)| {
       (Some(device), Some(argument))
@@ -345,23 +345,23 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
 
   match device {
     None => {
-      let name = format!("{}", &input.ident);
+      let name = format!("{}", &input.sig.ident);
       expand_wrapper(name, None, argument, &input)
     },
     Some(SupportedDevice::Pro) => {
-      let name = format!("{}", &input.ident);
+      let name = format!("{}", &input.sig.ident);
       expand_wrapper(name, device, argument, &input)
     },
     Some(SupportedDevice::Storage) => {
-      let name = format!("{}", &input.ident);
+      let name = format!("{}", &input.sig.ident);
       expand_wrapper(name, device, argument, &input)
     },
     Some(SupportedDevice::Any) => {
-      let name = format!("{}_pro", &input.ident);
+      let name = format!("{}_pro", &input.sig.ident);
       let dev = Some(SupportedDevice::Pro);
       let pro = expand_wrapper(name, dev, argument, &input);
 
-      let name = format!("{}_storage", &input.ident);
+      let name = format!("{}_storage", &input.sig.ident);
       let dev = Some(SupportedDevice::Storage);
       let storage = expand_wrapper(name, dev, argument, &input);
 
@@ -496,12 +496,13 @@ where
   };
 
   match args.first() {
-    Some(arg) => match arg.value() {
-      syn::FnArg::Captured(captured) => {
-        let arg = syn::FnArg::Captured(syn::ArgCaptured {
-          pat: captured.pat.clone(),
-          colon_token: captured.colon_token,
-          ty: syn::Type::Path(syn::parse_quote! { #arg_type }),
+    Some(arg) => match arg {
+      syn::FnArg::Typed(pat_type) => {
+        let arg = syn::FnArg::Typed(syn::PatType {
+          attrs: Vec::new(),
+          pat: pat_type.pat.clone(),
+          colon_token: pat_type.colon_token,
+          ty: Box::new(syn::Type::Path(syn::parse_quote! { #arg_type })),
         });
         quote! { #arg }
       }
@@ -517,10 +518,9 @@ fn expand_call(
   wrappee: &syn::ItemFn,
 ) -> Tokens
 {
-  let test_name = &wrappee.ident;
-  let decl = &wrappee.decl;
+  let test_name = &wrappee.sig.ident;
   let group = DeviceGroup::from(device);
-  let connect = expand_connect(group, &decl.output);
+  let connect = expand_connect(group, &wrappee.sig.output);
 
   let call = match device {
     None => quote! { #test_name() },
@@ -593,13 +593,12 @@ where
   // implementations.
   let name = Ident::new(fn_name.as_ref(), Span::call_site());
   let attrs = &wrappee.attrs;
-  let decl = &wrappee.decl;
   let body = &wrappee.block;
-  let test_name = &wrappee.ident;
-  let test_arg = expand_arg(device, argument, &decl.inputs);
+  let test_name = &wrappee.sig.ident;
+  let test_arg = expand_arg(device, argument, &wrappee.sig.inputs);
   let test_call = expand_call(device, argument, wrappee);
 
-  let ret_type = match &decl.output {
+  let ret_type = match &wrappee.sig.output {
     syn::ReturnType::Default => quote! {()},
     syn::ReturnType::Type(_, type_) => quote! {#type_},
   };
@@ -628,15 +627,15 @@ where
 
 fn determine_device_for_arg(arg: &syn::FnArg) -> (SupportedDevice, ArgumentType) {
   match arg {
-    syn::FnArg::Captured(arg) => {
-      let type_ = &arg.ty;
-      match type_ {
+    syn::FnArg::Typed(pat_type) => {
+      let type_ = &pat_type.ty;
+      match &**type_ {
         syn::Type::Path(path) => {
           if path.path.segments.is_empty() {
             panic!("invalid function argument type: {}", quote! {#path});
           }
 
-          let type_ = format!("{}", path.path.segments.last().unwrap().value().ident);
+          let type_ = format!("{}", path.path.segments.last().unwrap().ident);
           match type_.as_ref() {
             "Model" => (SupportedDevice::Any, ArgumentType::Model),
             "Storage" => (SupportedDevice::Storage, ArgumentType::Device),
@@ -684,7 +683,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_none() {}
     };
-    let dev_type = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.sig.inputs);
 
     assert_eq!(dev_type, None);
   }
@@ -695,7 +694,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_pro(device: nitrokey::Pro) {}
     };
-    let dev_type = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.sig.inputs);
 
     assert_eq!(dev_type, Some((SupportedDevice::Pro, ArgumentType::Device)));
   }
@@ -706,7 +705,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_storage(device: nitrokey::Storage) {}
     };
-    let dev_type = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.sig.inputs);
 
     assert_eq!(dev_type, Some((SupportedDevice::Storage, ArgumentType::Device)));
   }
@@ -717,7 +716,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_any(device: nitrokey::DeviceWrapper) {}
     };
-    let dev_type = determine_device(&input.decl.inputs);
+    let dev_type = determine_device(&input.sig.inputs);
 
     assert_eq!(dev_type, Some((SupportedDevice::Any, ArgumentType::DeviceWrapper)));
   }
@@ -729,7 +728,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_pro(device: nitrokey::Pro, _: i32) {}
     };
-    let _ = determine_device(&input.decl.inputs);
+    let _ = determine_device(&input.sig.inputs);
   }
 
   #[test]
@@ -739,7 +738,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_self(&self) {}
     };
-    let _ = determine_device(&input.decl.inputs);
+    let _ = determine_device(&input.sig.inputs);
   }
 
   #[test]
@@ -750,7 +749,7 @@ mod tests {
       #[nitrokey_test::test]
       fn test_any(device: &nitrokey::DeviceWrapper) {}
     };
-    let _ = determine_device(&input.decl.inputs);
+    let _ = determine_device(&input.sig.inputs);
   }
 
   #[test]
@@ -760,6 +759,6 @@ mod tests {
       #[nitrokey_test::test]
       fn test_foobarbaz(device: nitrokey::FooBarBaz) {}
     };
-    let _ = determine_device(&input.decl.inputs);
+    let _ = determine_device(&input.sig.inputs);
   }
 }
