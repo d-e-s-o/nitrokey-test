@@ -63,6 +63,16 @@ fn storage(device: Storage) {
   assert!(manager.connect_storage().is_ok())
 }
 
+#[nitrokey_test::test]
+fn storage_mut(mut device: Storage) {
+  // We don't actually want to execute anything, but the wink method
+  // requires a mutable device and we want to make sure that type checks
+  // correctly.
+  if false {
+    let _ = device.wink();
+  }
+}
+
 #[nitrokey_test::test(storage)]
 fn storage_filter() {
   let mut manager = nitrokey::force_take().unwrap();
