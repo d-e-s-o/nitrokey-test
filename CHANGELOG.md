@@ -1,5 +1,5 @@
-Unreleased
-----------
+0.3.2
+-----
 - Bumped `syn` dependency to `1.0`
 - Bumped `quote` dependency to `1.0`
 - Bumped `proc-macro` dependency to `1.0`
