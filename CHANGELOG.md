@@ -1,3 +1,8 @@
+Unreleased
+----------
+- Updated minimum required Rust version to `1.35`
+
+
 0.3.2
 -----
 - Bumped `syn` dependency to `1.0`
