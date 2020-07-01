@@ -87,8 +87,6 @@
 //!   "DeviceWrapper"; that means `use ... as` declarations will not work
 //!   properly
 
-extern crate proc_macro;
-
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use proc_macro2::Literal;
