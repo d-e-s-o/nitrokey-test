@@ -33,7 +33,7 @@ version = "1.0"
 features = ["full"]
 
 [dev-dependencies.nitrokey]
-version = "0.4"
+version = "0.7"
 
 [dev-dependencies.nitrokey-test-state]
 version = "0.1"
