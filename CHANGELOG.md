@@ -1,5 +1,5 @@
-Unreleased
-----------
+0.4.0
+-----
 - Updated minimum required Rust version to `1.42`
 - Bumped `nitrokey` dependency to `0.7`
 
