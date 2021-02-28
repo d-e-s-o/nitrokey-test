@@ -1,3 +1,8 @@
+Unreleased
+----------
+- Bumped `nitrokey` dependency to `0.8`
+
+
 0.4.0
 -----
 - Updated minimum required Rust version to `1.42`
