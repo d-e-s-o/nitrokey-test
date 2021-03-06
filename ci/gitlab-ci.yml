@@ -26,4 +26,4 @@ lint:clippy:
   # dependencies may emit errors otherwise.
   - cargo clippy --all-targets --all-features -- -A clippy::all
   - cargo clean --package=nitrokey-test
-  - cargo clippy --all-targets --all-features -- -D warnings
+  - cargo clippy --all-targets --all-features -- -A unknown_lints -D warnings
