@@ -1,5 +1,8 @@
 Unreleased
 ----------
+- Added support for Librem Key devices:
+  - Introduced 'librem' group and filter
+  - Added support for `Librem` device as test argument
 - Bumped `nitrokey` dependency to `0.8`
 
 

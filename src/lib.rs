@@ -1,7 +1,7 @@
 // lib.rs
 
 // *************************************************************************
-// * Copyright (C) 2019-2020 Daniel Mueller (deso@posteo.net)              *
+// * Copyright (C) 2019-2021 Daniel Mueller (deso@posteo.net)              *
 // *                                                                       *
 // * This program is free software: you can redistribute it and/or modify  *
 // * it under the terms of the GNU General Public License as published by  *
@@ -64,14 +64,15 @@
 //! `nitrokey` crate and its users.
 //!
 //! The crate simplifies test creation by providing an attribute macro
-//! that generates code for running a test on up to two devices (a
-//! Nitrokey Pro and Nitrokey Storage) and takes care of serializing all
-//! tests tagged with this attribute, and causes them to be skipped if
-//! the respective device is not present.
+//! that generates code for running a test on up to three devices (
+//! Nitrokey Pro, Nitrokey Storage, and Librem Key), takes care of
+//! serializing all tests tagged with this attribute, and causes them to
+//! be skipped if the respective device is not present.
 //!
 //! It also provides support for running tests belonging to a certain
-//! group. There are three groups: "nodev" (representing tests that run
-//! when no device is present), "pro" (encompassing tests eligible to
+//! group. There are four groups: "nodev" (representing tests that run
+//! when no device is present), "librem" (comprised of all tests that
+//! can run on the Librem Key), "pro" (encompassing tests eligible to
 //! run on the Nitrokey Pro), and "storage" (for tests running against a
 //! Nitrokey Storage device).
 //! Running tests of a specific group (and only those) can be
@@ -104,6 +105,9 @@ const NITROKEY_TEST_GROUP: &str = "NITROKEY_TEST_GROUP";
 /// The name of the group containing tests that run when no device is
 /// present.
 const NITROKEY_GROUP_NODEV: &str = "nodev";
+/// The name of the group containing tests that run when the Librem Key
+/// is present.
+const NITROKEY_GROUP_LIBREM: &str = "librem";
 /// The name of the group containing tests that run when the Nitrokey
 /// Pro is present.
 const NITROKEY_GROUP_PRO: &str = "pro";
@@ -126,6 +130,8 @@ enum ArgumentType {
 /// A type used to determine what Nitrokey device to test on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SupportedDevice {
+  /// Only the Librem Key is supported.
+  Librem,
   /// Only the Nitrokey Pro is supported.
   Pro,
   /// Only the Nitrokey Storage is supported.
@@ -137,6 +143,8 @@ enum SupportedDevice {
 /// A type used for "filtering" what device types to emit test code for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Filter {
+  /// Only emit tests for a Librem Key.
+  Librem,
   /// Only emit tests for a Nitrokey Pro.
   Pro,
   /// Only emit tests for a Nitrokey Storage.
@@ -146,6 +154,7 @@ enum Filter {
 impl Filter {
   pub fn from_attribute(attr: &TokenStream) -> Option<Self> {
     match attr.to_string().as_ref() {
+      "librem" => Some(Filter::Librem),
       "pro" => Some(Filter::Pro),
       "storage" => Some(Filter::Storage),
       "" => None,
@@ -159,18 +168,32 @@ impl Filter {
 ///
 /// Filtering basically produces the following outcomes:
 /// #[test]          fn foo();                      -> no device
+/// #[test(librem)]  fn foo();                      -> librem
 /// #[test(pro)]     fn foo();                      -> pro
 /// #[test(storage)] fn foo();                      -> storage
+///
+/// #[test]          fn foo(device: Librem);        -> librem
+/// #[test(librem)]  fn foo(device: Librem);        -> librem
+/// #[test(pro)]     fn foo(device: Librem);        -> error
+/// #[test(storage)] fn foo(device: Librem);        -> error
+///
 /// #[test]          fn foo(device: Pro);           -> pro
+/// #[test(librem)]  fn foo(device: Pro);           -> error
 /// #[test(pro)]     fn foo(device: Pro);           -> pro
 /// #[test(storage)] fn foo(device: Pro);           -> error
+///
 /// #[test]          fn foo(device: Storage);       -> storage
+/// #[test(librem)]  fn foo(device: Storage);       -> error
 /// #[test(pro)]     fn foo(device: Storage);       -> error
 /// #[test(storage)] fn foo(device: Storage);       -> storage
+///
 /// #[test]          fn foo(device: DeviceWrapper); -> any
+/// #[test(librem)]  fn foo(device: DeviceWrapper); -> librem
 /// #[test(pro)]     fn foo(device: DeviceWrapper); -> pro
 /// #[test(storage)] fn foo(device: DeviceWrapper); -> storage
+///
 /// #[test]          fn foo(model: Model);          -> any
+/// #[test(librem)]  fn foo(model: Model);          -> librem
 /// #[test(pro)]     fn foo(model: Model);          -> pro
 /// #[test(storage)] fn foo(model: Model);          -> storage
 fn filter_device(
@@ -182,24 +205,33 @@ fn filter_device(
     None => match filter {
       None => None,
       // As can be seen from the table above, we have some logic in here
-      // (for the user's convenience) that is no longer strictly a
-      // filter, but rather an addition. That is done mostly for the
-      // user's convenience.
+      // that is no longer strictly a filter, but rather an addition.
+      // That is done mostly for the user's convenience.
+      Some(Filter::Librem) => Some(SupportedDevice::Librem),
       Some(Filter::Pro) => Some(SupportedDevice::Pro),
       Some(Filter::Storage) => Some(SupportedDevice::Storage),
+    },
+    Some(SupportedDevice::Librem) => match filter {
+      None |
+      Some(Filter::Librem) => Some(SupportedDevice::Librem),
+      Some(Filter::Pro) => panic!("unable to combine 'pro' filter with Librem device"),
+      Some(Filter::Storage) => panic!("unable to combine 'storage' filter with Librem device"),
     },
     Some(SupportedDevice::Pro) => match filter {
       None |
       Some(Filter::Pro) => Some(SupportedDevice::Pro),
+      Some(Filter::Librem) => panic!("unable to combine 'librem' filter with Pro device"),
       Some(Filter::Storage) => panic!("unable to combine 'storage' filter with Pro device"),
     },
     Some(SupportedDevice::Storage) => match filter {
       None |
       Some(Filter::Storage) => Some(SupportedDevice::Storage),
+      Some(Filter::Librem) => panic!("unable to combine 'librem' filter with Storage device"),
       Some(Filter::Pro) => panic!("unable to combine 'pro' filter with Storage device"),
     },
     Some(SupportedDevice::Any) => match filter {
       None => Some(SupportedDevice::Any),
+      Some(Filter::Librem) => Some(SupportedDevice::Librem),
       Some(Filter::Pro) => Some(SupportedDevice::Pro),
       Some(Filter::Storage) => Some(SupportedDevice::Storage),
     },
@@ -213,6 +245,8 @@ enum DeviceGroup {
   /// The group encompassing all tests that require no device to be
   /// present.
   No,
+  /// The group containing all tests for the Librem Key.
+  Librem,
   /// The group containing all tests for the Nitrokey Pro.
   Pro,
   /// The group containing all tests for the Nitrokey Storage.
@@ -223,6 +257,7 @@ impl AsRef<str> for DeviceGroup {
   fn as_ref(&self) -> &str {
     match *self {
       DeviceGroup::No => NITROKEY_GROUP_NODEV,
+      DeviceGroup::Librem => NITROKEY_GROUP_LIBREM,
       DeviceGroup::Pro => NITROKEY_GROUP_PRO,
       DeviceGroup::Storage => NITROKEY_GROUP_STORAGE,
     }
@@ -234,6 +269,7 @@ impl From<Option<SupportedDevice>> for DeviceGroup {
     match device {
       None => DeviceGroup::No,
       Some(device) => match device {
+        SupportedDevice::Librem => DeviceGroup::Librem,
         SupportedDevice::Pro => DeviceGroup::Pro,
         SupportedDevice::Storage => DeviceGroup::Storage,
         SupportedDevice::Any => panic!("an Any device cannot belong to a group"),
@@ -344,15 +380,17 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
       let name = format!("{}", &input.sig.ident);
       expand_wrapper(name, None, argument, &input)
     },
-    Some(SupportedDevice::Pro) => {
-      let name = format!("{}", &input.sig.ident);
-      expand_wrapper(name, device, argument, &input)
-    },
-    Some(SupportedDevice::Storage) => {
+    Some(SupportedDevice::Librem)
+      | Some(SupportedDevice::Pro)
+      | Some(SupportedDevice::Storage) => {
       let name = format!("{}", &input.sig.ident);
       expand_wrapper(name, device, argument, &input)
     },
     Some(SupportedDevice::Any) => {
+      let name = format!("{}_librem", &input.sig.ident);
+      let dev = Some(SupportedDevice::Librem);
+      let librem = expand_wrapper(name, dev, argument, &input);
+
       let name = format!("{}_pro", &input.sig.ident);
       let dev = Some(SupportedDevice::Pro);
       let pro = expand_wrapper(name, dev, argument, &input);
@@ -361,8 +399,9 @@ pub fn test(attr: TokenStream, item: TokenStream) -> TokenStream {
       let dev = Some(SupportedDevice::Storage);
       let storage = expand_wrapper(name, dev, argument, &input);
 
-      // Emit a test for both the Pro and the Storage device.
+      // Emit a test for all supported devices.
       quote! {
+        #librem
         #pro
         #storage
       }
@@ -384,6 +423,7 @@ fn expand_connect(group: DeviceGroup, ret_type: &syn::ReturnType) -> Tokens {
 
   let connect = match group {
     DeviceGroup::No => quote! { manager.connect() },
+    DeviceGroup::Librem => quote! { manager.connect_librem() },
     DeviceGroup::Pro => quote! { manager.connect_pro() },
     DeviceGroup::Storage => quote! { manager.connect_storage() },
   };
@@ -416,6 +456,7 @@ fn expand_connect(group: DeviceGroup, ret_type: &syn::ReturnType) -> Tokens {
         Ok(group) => {
           match group.as_ref() {
             #NITROKEY_GROUP_NODEV |
+            #NITROKEY_GROUP_LIBREM |
             #NITROKEY_GROUP_PRO |
             #NITROKEY_GROUP_STORAGE => {
               if group == #group {
@@ -482,6 +523,7 @@ where
     Some(device) => match argument {
       None => quote! {},
       Some(ArgumentType::Device) => match device {
+        SupportedDevice::Librem => quote! { ::nitrokey::Librem },
         SupportedDevice::Pro => quote! { ::nitrokey::Pro },
         SupportedDevice::Storage => quote! { ::nitrokey::Storage },
         SupportedDevice::Any => unreachable!(),
@@ -524,6 +566,11 @@ fn expand_call(
       None => quote! { #test_name() },
       Some(ArgumentType::Device) => quote! { #test_name(device) },
       Some(ArgumentType::DeviceWrapper) => match device {
+        SupportedDevice::Librem => {
+          quote! {
+            #test_name(::nitrokey::DeviceWrapper::Librem(device))
+          }
+        },
         SupportedDevice::Pro => {
           quote! {
             #test_name(::nitrokey::DeviceWrapper::Pro(device))
@@ -538,6 +585,7 @@ fn expand_call(
       },
       Some(ArgumentType::Model) => {
         let model = match device {
+          SupportedDevice::Librem => quote! { ::nitrokey::Model::Librem },
           SupportedDevice::Pro => quote! { ::nitrokey::Model::Pro },
           SupportedDevice::Storage => quote! { ::nitrokey::Model::Storage },
           SupportedDevice::Any => unreachable!(),
@@ -636,6 +684,7 @@ fn determine_device_for_arg(arg: &syn::FnArg) -> (SupportedDevice, ArgumentType)
             "Model" => (SupportedDevice::Any, ArgumentType::Model),
             "Storage" => (SupportedDevice::Storage, ArgumentType::Device),
             "Pro" => (SupportedDevice::Pro, ArgumentType::Device),
+            "Librem" => (SupportedDevice::Librem, ArgumentType::Device),
             "DeviceWrapper" => (SupportedDevice::Any, ArgumentType::DeviceWrapper),
             _ => panic!("unsupported function argument type: {}", type_),
           }
@@ -682,6 +731,17 @@ mod tests {
     let dev_type = determine_device(&input.sig.inputs);
 
     assert_eq!(dev_type, None);
+  }
+
+  #[test]
+  fn determine_librem() {
+    let input: syn::ItemFn = syn::parse_quote! {
+      #[nitrokey_test::test]
+      fn test_librem(device: nitrokey::Librem) {}
+    };
+    let dev_type = determine_device(&input.sig.inputs);
+
+    assert_eq!(dev_type, Some((SupportedDevice::Librem, ArgumentType::Device)));
   }
 
   #[test]

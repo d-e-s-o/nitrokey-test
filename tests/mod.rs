@@ -1,7 +1,7 @@
 // mod.rs
 
 // *************************************************************************
-// * Copyright (C) 2019 Daniel Mueller (deso@posteo.net)                   *
+// * Copyright (C) 2019,2021 Daniel Mueller (deso@posteo.net)              *
 // *                                                                       *
 // * This program is free software: you can redistribute it and/or modify  *
 // * it under the terms of the GNU General Public License as published by  *
@@ -31,6 +31,28 @@ fn no_dev() {
     Error::CommunicationError(CommunicationError::NotConnected) => (),
     _ => panic!("received unexpected error: {:?}", error),
   }
+}
+
+#[nitrokey_test::test]
+fn librem(device: Librem) {
+  assert_eq!(device.get_model(), Model::Librem);
+
+  let manager = device.into_manager();
+  assert!(manager.connect_librem().is_ok())
+}
+
+#[nitrokey_test::test(librem)]
+fn librem_filter() {
+  let mut manager = nitrokey::force_take().unwrap();
+  assert!(manager.connect_librem().is_ok());
+}
+
+#[nitrokey_test::test(librem)]
+fn librem_model(model: Model) {
+  assert_eq!(model, Model::Librem);
+
+  let mut manager = nitrokey::force_take().unwrap();
+  assert!(manager.connect_librem().is_ok());
 }
 
 #[nitrokey_test::test]
@@ -95,6 +117,14 @@ fn any(device: DeviceWrapper) {
   assert!(manager.connect_model(model).is_ok())
 }
 
+#[nitrokey_test::test(librem)]
+fn any_librem_filter(device: DeviceWrapper) {
+  match device {
+    nitrokey::DeviceWrapper::Librem(_) => (),
+    _ => panic!("received invalid model: {:?}", device),
+  }
+}
+
 #[nitrokey_test::test(storage)]
 fn any_storage_filter(device: DeviceWrapper) {
   match device {
@@ -145,6 +175,6 @@ fn mutable_device(mut device: nitrokey::DeviceWrapper) {
 }
 
 #[nitrokey_test::test]
-fn aribtrary_argument_name(foobarbaz: nitrokey::DeviceWrapper) {
+fn arbitrary_argument_name(foobarbaz: nitrokey::DeviceWrapper) {
   let _ = foobarbaz.get_model();
 }
