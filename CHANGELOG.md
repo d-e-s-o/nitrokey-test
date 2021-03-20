@@ -1,5 +1,5 @@
-Unreleased
-----------
+0.5.0
+-----
 - Added support for Librem Key devices:
   - Introduced 'librem' group and filter
   - Added support for `Librem` device as test argument
