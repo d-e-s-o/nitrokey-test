@@ -1,3 +1,8 @@
+Unreleased
+----------
+- Bumped `nitrokey` dependency to `0.9`
+
+
 0.5.0
 -----
 - Added support for Librem Key devices:
