@@ -719,8 +719,6 @@ mod tests {
   use super::determine_device;
   use super::SupportedDevice;
 
-  use syn;
-
 
   #[test]
   fn determine_nitrokey_none() {
