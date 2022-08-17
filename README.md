@@ -1,7 +1,7 @@
 [![pipeline](https://gitlab.com/d-e-s-o/nitrokey-test/badges/main/pipeline.svg)](https://gitlab.com/d-e-s-o/nitrokey-test/commits/main)
 [![crates.io](https://img.shields.io/crates/v/nitrokey-test.svg)](https://crates.io/crates/nitrokey-test)
 [![Docs](https://docs.rs/nitrokey-test/badge.svg)](https://docs.rs/nitrokey-test)
-[![rustc](https://img.shields.io/badge/rustc-1.42+-blue.svg)](https://blog.rust-lang.org/2020/03/12/Rust-1.42.html)
+[![rustc](https://img.shields.io/badge/rustc-1.47+-blue.svg)](https://blog.rust-lang.org/2020/10/08/Rust-1.47.html)
 [![license](https://img.shields.io/github/license/d-e-s-o/nitrokey-test.svg)](https://github.com/d-e-s-o/nitrokey-test/blob/main/LICENSE)
 
 nitrokey-test
