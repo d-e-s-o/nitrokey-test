@@ -1,3 +1,8 @@
+Unreleased
+----------
+- Switched to using GitHub Actions as CI provider
+
+
 0.5.0
 -----
 - Added support for Librem Key devices:

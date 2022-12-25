@@ -1,4 +1,4 @@
-[![pipeline](https://gitlab.com/d-e-s-o/nitrokey-test/badges/main/pipeline.svg)](https://gitlab.com/d-e-s-o/nitrokey-test/commits/main)
+[![pipeline](https://github.com/d-e-s-o/nitrokey-test/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/d-e-s-o/nitrokey-test/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/nitrokey-test.svg)](https://crates.io/crates/nitrokey-test)
 [![Docs](https://docs.rs/nitrokey-test/badge.svg)](https://docs.rs/nitrokey-test)
 [![rustc](https://img.shields.io/badge/rustc-1.42+-blue.svg)](https://blog.rust-lang.org/2020/03/12/Rust-1.42.html)
